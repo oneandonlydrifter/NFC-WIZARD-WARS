@@ -55,6 +55,14 @@
                     </div>
                 </div>
 
+                <!-- Start NFC Button (NEW) -->
+                <button id="start-nfc-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-center gap-2 mb-4">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
+                    </svg>
+                    Enable NFC Scanning
+                </button>
+
                 <!-- Reset Button -->
                 <button id="reset-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-center gap-2 mb-4">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +76,7 @@
             <div class="bg-black/50 backdrop-blur-sm rounded-xl p-4 border border-purple-500/30">
                 <h2 class="text-white font-semibold mb-3">Game Log</h2>
                 <div id="game-log" class="bg-gray-900 rounded p-3 h-48 overflow-y-auto">
-                    <p class="text-gray-400 text-sm">Waiting for NFC signals...</p>
+                    <p class="text-gray-400 text-sm">Click 'Enable NFC Scanning' to start...</p>
                 </div>
             </div>
 
@@ -76,14 +84,22 @@
             <div class="mt-4 bg-black/30 rounded-lg p-4">
                 <h3 class="text-white font-semibold mb-2">Flipper Zero NFC Commands:</h3>
                 <ul class="text-gray-300 text-sm space-y-1">
-                    <li>• "ATTACK1" - Deal 1 damage</li>
-                    <li>• "ATTACK3" - Deal 3 damage</li>
-                    <li>• "ATTACK5" - Deal 5 damage</li>
-                    <li>• "HEAL1" - Restore 1 HP</li>
-                    <li>• "HEAL2" - Restore 2 HP</li>
-                    <li>• "HEAL3" - Restore 3 HP</li>
-                    <li>• "BLOCK" or "SHIELD" - Block next attack</li>
+                    <li>• <strong>"ATTACK1"</strong> - Deal 1 damage</li>
+                    <li>• <strong>"ATTACK3"</strong> - Deal 3 damage</li>
+                    <li>• <strong>"ATTACK5"</strong> - Deal 5 damage</li>
+                    <li>• <strong>"HEAL1"</strong> - Restore 1 HP</li>
+                    <li>• <strong>"HEAL2"</strong> - Restore 2 HP</li>
+                    <li>• <strong>"HEAL3"</strong> - Restore 3 HP</li>
+                    <li>• <strong>"BLOCK"</strong> or <strong>"SHIELD"</strong> - Block next attack</li>
+                    <li>• <strong>"RESET"</strong> - Reset the game</li>
+                    <li>• <strong>"STATUS"</strong> - Check current health</li>
                 </ul>
+                <div class="mt-3 p-2 bg-yellow-900/30 rounded border border-yellow-500/50">
+                    <p class="text-yellow-300 text-xs">
+                        <strong>💡 Tips:</strong> Create text records in NFC Maker with these exact words. 
+                        Game works best on Android phones with Chrome browser and NFC enabled.
+                    </p>
+                </div>
             </div>
         </div>
     </div>
@@ -97,6 +113,7 @@
                 this.gameLog = [];
                 this.nfcSupported = false;
                 this.isListening = false;
+                this.nfcReader = null;
                 
                 this.initializeElements();
                 this.setupEventListeners();
@@ -112,43 +129,205 @@
                 this.nfcStatus = document.getElementById('nfc-status');
                 this.gameLogEl = document.getElementById('game-log');
                 this.resetBtn = document.getElementById('reset-btn');
+                this.startNfcBtn = document.getElementById('start-nfc-btn');
             }
 
             setupEventListeners() {
                 this.resetBtn.addEventListener('click', () => this.resetGame());
+                this.startNfcBtn.addEventListener('click', () => this.requestNFCPermission());
             }
 
             async checkNFCSupport() {
                 if ('NDEFReader' in window) {
                     this.nfcSupported = true;
-                    await this.startNFCReading();
+                    this.updateNFCStatus('NFC supported! Click "Enable NFC Scanning" to start.');
+                    this.addToLog('NFC hardware detected. Ready to start scanning.');
                 } else {
                     this.nfcSupported = false;
-                    this.updateNFCStatus('NFC not supported. Use real NFC device like Flipper Zero.');
+                    this.updateNFCStatus('NFC not supported on this device/browser.');
+                    this.addToLog('NFC not supported. Use Chrome on Android with NFC enabled.');
+                    this.startNfcBtn.disabled = true;
+                    this.startNfcBtn.textContent = 'NFC Not Supported';
+                    this.startNfcBtn.className = 'w-full bg-gray-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 mb-4 cursor-not-allowed';
                 }
             }
 
-            async startNFCReading() {
-                try {
-                    this.nfcReader = new NDEFReader();
-                    await this.nfcReader.scan();
-                    this.isListening = true;
-                    this.updateNFCStatus('NFC scanning active - tap your Flipper Zero!', true);
+            async requestNFCPermission() {
+                if (!this.nfcSupported) {
+                    this.addToLog('❌ NFC not supported on this device.');
+                    return;
+                }
 
-                    this.nfcReader.addEventListener("reading", ({ message }) => {
-                        for (const record of message.records) {
-                            if (record.recordType === "text") {
-                                const textDecoder = new TextDecoder(record.encoding);
-                                const command = textDecoder.decode(record.data).toUpperCase();
-                                this.handleNFCCommand(command);
-                            }
+                // Prevent multiple permission requests
+                if (this.isListening) {
+                    this.addToLog('⚠️ NFC is already active!');
+                    return;
+                }
+
+                this.addToLog('🔄 Requesting NFC permissions...');
+                this.updateNFCStatus('Requesting NFC permissions...', false);
+                
+                // Disable button during request
+                this.startNfcBtn.disabled = true;
+                this.startNfcBtn.textContent = 'Requesting Permission...';
+
+                try {
+                    // Clean up any existing reader
+                    if (this.nfcReader) {
+                        try {
+                            await this.nfcReader.stop();
+                        } catch (e) {
+                            // Ignore errors when stopping
+                        }
+                    }
+
+                    // Create a new NDEFReader instance
+                    this.nfcReader = new NDEFReader();
+                    
+                    // Add event listeners with proper error handling
+                    this.nfcReader.addEventListener("reading", (event) => {
+                        try {
+                            this.handleNFCReading(event);
+                        } catch (readError) {
+                            this.addToLog(`❌ Error processing NFC data: ${readError.message}`);
                         }
                     });
 
+                    this.nfcReader.addEventListener("readingerror", (event) => {
+                        this.addToLog(`❌ NFC reading error: ${event.message || 'Unknown NFC error'}`);
+                        this.updateNFCStatus('❌ NFC reading error occurred', false);
+                    });
+
+                    // Add abort signal for timeout handling
+                    const abortController = new AbortController();
+                    const timeoutId = setTimeout(() => {
+                        abortController.abort();
+                        this.addToLog('❌ NFC permission request timed out');
+                    }, 10000); // 10 second timeout
+
+                    // Request permission and start scanning with timeout
+                    await this.nfcReader.scan({ signal: abortController.signal });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    // If we get here, permission was granted and scanning started
+                    this.isListening = true;
+                    this.updateNFCStatus('✅ NFC scanning active - tap your Flipper Zero!', true);
+                    this.addToLog('✅ NFC scanning started successfully!');
+                    this.addToLog('📱 Hold your Flipper Zero close to this device and emulate NFC tags');
+                    
+                    // Update button to show success
+                    this.startNfcBtn.textContent = '✅ NFC Active';
+                    this.startNfcBtn.className = 'w-full bg-green-600 text-white p-3 rounded-lg flex items-center justify-center gap-2 mb-4 cursor-not-allowed';
+
                 } catch (error) {
-                    this.addToLog(`NFC Error: ${error.message}`);
-                    this.updateNFCStatus(`NFC Error: ${error.message}`, false);
+                    // Re-enable button on error
+                    this.startNfcBtn.disabled = false;
+                    this.startNfcBtn.textContent = 'Enable NFC Scanning';
+                    
+                    this.addToLog(`❌ NFC Error: ${error.message || 'Unknown error'}`);
+                    this.updateNFCStatus(`❌ NFC Error: ${error.message || 'Unknown error'}`, false);
                     this.isListening = false;
+                    
+                    // Provide comprehensive error guidance
+                    if (error.name === 'NotAllowedError') {
+                        this.addToLog('🔧 Permission denied. Solutions:');
+                        this.addToLog('   1. Click the lock icon next to URL → Allow NFC');
+                        this.addToLog('   2. Go to chrome://settings/content/nfc → Allow');
+                        this.addToLog('   3. Refresh page and try again');
+                    } else if (error.name === 'NotSupportedError') {
+                        this.addToLog('🔧 NFC not supported. Try:');
+                        this.addToLog('   1. Use Chrome browser on Android');
+                        this.addToLog('   2. Make sure NFC is ON in phone settings');
+                        this.addToLog('   3. Update Chrome to latest version');
+                    } else if (error.name === 'AbortError') {
+                        this.addToLog('🔧 Permission request timed out. Try again.');
+                    } else if (error.name === 'InvalidStateError') {
+                        this.addToLog('🔧 NFC scanner in invalid state. Refresh page.');
+                    } else {
+                        this.addToLog('🔧 Unknown error. Troubleshooting:');
+                        this.addToLog('   1. Make sure NFC is enabled in device settings');
+                        this.addToLog('   2. Close other apps that might use NFC');
+                        this.addToLog('   3. Try restarting browser');
+                    }
+                }
+            }
+
+            handleNFCReading(event) {
+                try {
+                    const { message, serialNumber } = event;
+                    
+                    if (!message || !message.records) {
+                        this.addToLog('❌ Invalid NFC message received');
+                        return;
+                    }
+
+                    this.addToLog(`📡 NFC tag detected (Serial: ${serialNumber || 'Unknown'})`);
+                    
+                    let commandFound = false;
+                    
+                    for (const record of message.records) {
+                        if (record.recordType === "text") {
+                            try {
+                                // Handle different text record formats
+                                let command = '';
+                                
+                                if (record.encoding) {
+                                    const textDecoder = new TextDecoder(record.encoding);
+                                    command = textDecoder.decode(record.data);
+                                } else {
+                                    // Try UTF-8 first, then fallback to ASCII
+                                    try {
+                                        const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+                                        command = utf8Decoder.decode(record.data);
+                                    } catch (utf8Error) {
+                                        const asciiDecoder = new TextDecoder('ascii');
+                                        command = asciiDecoder.decode(record.data);
+                                    }
+                                }
+                                
+                                // Clean and validate command
+                                command = command.toUpperCase().trim().replace(/\0/g, ''); // Remove null bytes
+                                
+                                if (command.length > 0) {
+                                    this.handleNFCCommand(command);
+                                    commandFound = true;
+                                } else {
+                                    this.addToLog('❌ Empty command received from NFC tag');
+                                }
+                                
+                            } catch (decodeError) {
+                                this.addToLog(`❌ Error decoding NFC text: ${decodeError.message}`);
+                                // Try raw bytes as backup
+                                try {
+                                    const rawString = Array.from(new Uint8Array(record.data))
+                                        .map(byte => String.fromCharCode(byte))
+                                        .join('')
+                                        .toUpperCase()
+                                        .trim();
+                                    if (rawString.length > 0) {
+                                        this.addToLog(`🔧 Trying raw decode: "${rawString}"`);
+                                        this.handleNFCCommand(rawString);
+                                        commandFound = true;
+                                    }
+                                } catch (rawError) {
+                                    this.addToLog(`❌ Raw decode also failed: ${rawError.message}`);
+                                }
+                            }
+                        } else if (record.recordType === "url") {
+                            this.addToLog(`ℹ️ URL record detected (not supported): ${record.data}`);
+                        } else {
+                            this.addToLog(`ℹ️ Unsupported record type: ${record.recordType}`);
+                        }
+                    }
+                    
+                    if (!commandFound) {
+                        this.addToLog('❌ No valid text commands found in NFC tag');
+                        this.addToLog('💡 Make sure your Flipper Zero is emulating a text record');
+                    }
+                    
+                } catch (eventError) {
+                    this.addToLog(`❌ Error processing NFC reading event: ${eventError.message}`);
                 }
             }
 
@@ -158,52 +337,122 @@
             }
 
             handleNFCCommand(command) {
-                this.addToLog(`NFC Signal Detected: ${command}`);
-                
-                if (command.startsWith('ATTACK')) {
-                    const damage = parseInt(command.replace('ATTACK', '')) || 1;
-                    this.handleAttack(damage);
-                } else if (command.startsWith('HEAL')) {
-                    const healAmount = parseInt(command.replace('HEAL', '')) || 1;
-                    this.handleHeal(healAmount);
-                } else if (command === 'BLOCK' || command === 'SHIELD') {
-                    this.handleBlock();
-                } else {
-                    this.addToLog(`Unknown command: ${command}`);
+                // Validate command format
+                if (!command || typeof command !== 'string') {
+                    this.addToLog(`❌ Invalid command format received`);
+                    return;
                 }
+                
+                const cleanCommand = command.trim().toUpperCase();
+                this.addToLog(`📡 Processing command: "${cleanCommand}"`);
+                
+                // Check if game is over
+                if (this.hp === 0 && !cleanCommand.includes('RESET')) {
+                    this.addToLog(`💀 Cannot execute commands when defeated! Use RESET or click Reset button.`);
+                    return;
+                }
+                
+                // Process attack commands
+                if (cleanCommand.startsWith('ATTACK')) {
+                    const damageStr = cleanCommand.replace('ATTACK', '');
+                    const damage = parseInt(damageStr);
+                    
+                    if (isNaN(damage) || damage < 1 || damage > 10) {
+                        this.addToLog(`❌ Invalid attack value: "${damageStr}". Use ATTACK1, ATTACK3, or ATTACK5`);
+                        return;
+                    }
+                    
+                    this.handleAttack(damage);
+                    return;
+                }
+                
+                // Process heal commands  
+                if (cleanCommand.startsWith('HEAL')) {
+                    const healStr = cleanCommand.replace('HEAL', '');
+                    const healAmount = parseInt(healStr);
+                    
+                    if (isNaN(healAmount) || healAmount < 1 || healAmount > 5) {
+                        this.addToLog(`❌ Invalid heal value: "${healStr}". Use HEAL1, HEAL2, or HEAL3`);
+                        return;
+                    }
+                    
+                    this.handleHeal(healAmount);
+                    return;
+                }
+                
+                // Process defense commands
+                if (cleanCommand === 'BLOCK' || cleanCommand === 'SHIELD') {
+                    this.handleBlock();
+                    return;
+                }
+                
+                // Process utility commands
+                if (cleanCommand === 'RESET' || cleanCommand === 'RESTART') {
+                    this.addToLog(`🔄 Reset command received via NFC`);
+                    this.resetGame();
+                    return;
+                }
+                
+                if (cleanCommand === 'STATUS' || cleanCommand === 'INFO') {
+                    this.addToLog(`📊 Current Status: HP ${this.hp}/${this.maxHp}, Shield: ${this.isBlocked ? 'ACTIVE' : 'OFF'}`);
+                    return;
+                }
+                
+                // Unknown command
+                this.addToLog(`❓ Unknown command: "${cleanCommand}"`);
+                this.addToLog(`💡 Valid commands: ATTACK1-5, HEAL1-3, BLOCK, SHIELD, RESET, STATUS`);
             }
 
             handleAttack(damage) {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot take damage when already defeated!");
+                    return;
+                }
+                
                 if (this.isBlocked) {
                     this.addToLog(`🛡️ Attack blocked! ${damage} damage negated.`);
                     this.isBlocked = false;
                     this.updateShieldStatus();
+                    
+                    // Add visual feedback for successful block
+                    this.flashStatus('block');
                 } else {
+                    const oldHp = this.hp;
                     const newHp = Math.max(0, this.hp - damage);
                     this.hp = newHp;
-                    this.addToLog(`⚔️ Took ${damage} damage! HP: ${newHp}/${this.maxHp}`);
+                    
+                    this.addToLog(`⚔️ Took ${damage} damage! HP: ${oldHp} → ${newHp}/${this.maxHp}`);
                     this.updateDisplay();
+                    
+                    // Add visual feedback for damage
+                    this.flashStatus('damage');
                     
                     if (newHp === 0) {
                         this.addToLog("💀 Game Over! You have been defeated.");
+                        this.addToLog("🔄 Use RESET command or click Reset button to play again.");
+                        this.flashStatus('death');
+                    } else if (newHp <= 5) {
+                        this.addToLog("⚠️ Critical health! Consider healing.");
                     }
                 }
             }
 
             handleHeal(healAmount) {
                 if (this.hp === 0) {
-                    this.addToLog("💀 Cannot heal when defeated!");
+                    this.addToLog("💀 Cannot heal when defeated! Use RESET first.");
                     return;
                 }
                 
+                const oldHp = this.hp;
                 const newHp = Math.min(this.maxHp, this.hp + healAmount);
                 const actualHeal = newHp - this.hp;
                 this.hp = newHp;
                 
                 if (actualHeal > 0) {
-                    this.addToLog(`❤️ Healed ${actualHeal} HP! HP: ${newHp}/${this.maxHp}`);
+                    this.addToLog(`❤️ Healed ${actualHeal} HP! HP: ${oldHp} → ${newHp}/${this.maxHp}`);
+                    this.flashStatus('heal');
                 } else {
-                    this.addToLog(`❤️ Already at full health!`);
+                    this.addToLog(`❤️ Already at full health! (${this.hp}/${this.maxHp})`);
                 }
                 this.updateDisplay();
             }
@@ -214,9 +463,15 @@
                     return;
                 }
                 
+                if (this.isBlocked) {
+                    this.addToLog("🛡️ Shield already active!");
+                    return;
+                }
+                
                 this.isBlocked = true;
                 this.addToLog("🛡️ Shield activated! Next attack will be blocked.");
                 this.updateShieldStatus();
+                this.flashStatus('shield');
             }
 
             updateDisplay() {
@@ -258,7 +513,7 @@
                 const logEntry = `${timestamp}: ${message}`;
                 this.gameLog.push(logEntry);
                 
-                if (this.gameLog.length > 10) {
+                if (this.gameLog.length > 15) {
                     this.gameLog.shift();
                 }
                 
@@ -267,7 +522,7 @@
 
             updateGameLog() {
                 if (this.gameLog.length === 0) {
-                    this.gameLogEl.innerHTML = '<p class="text-gray-400 text-sm">Waiting for NFC signals...</p>';
+                    this.gameLogEl.innerHTML = '<p class="text-gray-400 text-sm">Click "Enable NFC Scanning" to start...</p>';
                 } else {
                     this.gameLogEl.innerHTML = this.gameLog
                         .map(entry => `<div class="text-green-300 text-sm mb-1 font-mono">${entry}</div>`)
@@ -284,12 +539,55 @@
                 this.updateDisplay();
                 this.updateShieldStatus();
                 this.updateGameLog();
-                this.addToLog("Game reset! Ready for battle.");
+                this.addToLog("🎮 Game reset! Ready for battle.");
+                this.addToLog("📱 NFC scanning is still active - ready for commands!");
+            }
+
+            // Add visual feedback system
+            flashStatus(type) {
+                const colors = {
+                    damage: 'bg-red-500',
+                    heal: 'bg-green-500', 
+                    shield: 'bg-blue-500',
+                    block: 'bg-yellow-500',
+                    death: 'bg-red-800'
+                };
+                
+                const originalClass = document.body.className;
+                const flashClass = colors[type] || 'bg-gray-500';
+                
+                // Add flash effect
+                document.body.style.boxShadow = `inset 0 0 20px rgba(255,255,255,0.3)`;
+                
+                setTimeout(() => {
+                    document.body.style.boxShadow = '';
+                }, 200);
+            }
+
+            // Add cleanup method
+            async cleanup() {
+                if (this.nfcReader && this.isListening) {
+                    try {
+                        await this.nfcReader.stop();
+                        this.addToLog('🔄 NFC scanning stopped');
+                    } catch (error) {
+                        console.warn('Error stopping NFC reader:', error);
+                    }
+                }
+                this.isListening = false;
+                this.nfcReader = null;
             }
         }
 
+        // Add page cleanup on unload
+        window.addEventListener('beforeunload', () => {
+            if (window.nfcBattleGame) {
+                window.nfcBattleGame.cleanup();
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', () => {
-            new NFCBattleGame();
+            window.nfcBattleGame = new NFCBattleGame();
         });
     </script>
 </body>
