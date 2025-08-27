@@ -32,18 +32,30 @@
                 </div>
 
                 <!-- Status Indicators -->
-                <div class="flex gap-4 mb-6">
+                <div class="grid grid-cols-2 gap-2 mb-6">
                     <div id="shield-status" class="flex items-center gap-2 p-2 rounded bg-gray-700">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.031 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                         </svg>
-                        <span class="text-white text-sm">VULNERABLE</span>
+                        <span class="text-white text-xs">VULNERABLE</span>
                     </div>
                     <div id="health-status" class="flex items-center gap-2 p-2 rounded bg-gray-700">
-                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path>
                         </svg>
-                        <span class="text-white text-sm">ALIVE</span>
+                        <span class="text-white text-xs">ALIVE</span>
+                    </div>
+                    <div id="critical-status" class="flex items-center gap-2 p-2 rounded bg-gray-700">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                        <span class="text-white text-xs">NORMAL</span>
+                    </div>
+                    <div id="special-status" class="flex items-center gap-2 p-2 rounded bg-gray-700">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path>
+                        </svg>
+                        <span class="text-white text-xs">NONE</span>
                     </div>
                 </div>
 
@@ -115,6 +127,15 @@
                 this.isListening = false;
                 this.nfcReader = null;
                 
+                // New spell effects
+                this.criticalNext = false;
+                this.boostNext = 0;
+                this.weakenNext = false;
+                this.reflectActive = false;
+                this.counterActive = false;
+                this.hasRevive = false;
+                this.lifestealActive = false;
+                
                 this.initializeElements();
                 this.setupEventListeners();
                 this.checkNFCSupport();
@@ -125,6 +146,8 @@
                 this.hpBar = document.getElementById('hp-bar');
                 this.shieldStatus = document.getElementById('shield-status');
                 this.healthStatus = document.getElementById('health-status');
+                this.criticalStatus = document.getElementById('critical-status');
+                this.specialStatus = document.getElementById('special-status');
                 this.nfcIndicator = document.getElementById('nfc-indicator');
                 this.nfcStatus = document.getElementById('nfc-status');
                 this.gameLogEl = document.getElementById('game-log');
@@ -386,6 +409,52 @@
                     return;
                 }
                 
+                // Process new spell commands
+                if (cleanCommand === 'CRITICAL') {
+                    this.handleCritical();
+                    return;
+                }
+                
+                if (cleanCommand === 'GAMBLE') {
+                    this.handleGamble();
+                    return;
+                }
+                
+                if (cleanCommand === 'BOOST') {
+                    this.handleBoost();
+                    return;
+                }
+                
+                if (cleanCommand === 'WEAKEN') {
+                    this.handleWeaken();
+                    return;
+                }
+                
+                if (cleanCommand === 'COUNTER') {
+                    this.handleCounter();
+                    return;
+                }
+                
+                if (cleanCommand === 'REFLECT') {
+                    this.handleReflect();
+                    return;
+                }
+                
+                if (cleanCommand === 'SWAP') {
+                    this.handleSwap();
+                    return;
+                }
+                
+                if (cleanCommand === 'REVIVE') {
+                    this.handleRevive();
+                    return;
+                }
+                
+                if (cleanCommand === 'LIFESTEAL') {
+                    this.handleLifesteal();
+                    return;
+                }
+                
                 // Process utility commands
                 if (cleanCommand === 'RESET' || cleanCommand === 'RESTART') {
                     this.addToLog(`🔄 Reset command received via NFC`);
@@ -400,37 +469,125 @@
                 
                 // Unknown command
                 this.addToLog(`❓ Unknown command: "${cleanCommand}"`);
-                this.addToLog(`💡 Valid commands: ATTACK1-5, HEAL1-3, BLOCK, SHIELD, RESET, STATUS`);
+                this.addToLog(`💡 Basic: ATTACK1-5, HEAL1-3, BLOCK, SHIELD`);
+                this.addToLog(`💡 Spells: CRITICAL, GAMBLE, BOOST, WEAKEN, COUNTER`);
+                this.addToLog(`💡 Advanced: REFLECT, SWAP, REVIVE, LIFESTEAL`);
+                this.addToLog(`💡 Utility: RESET, STATUS`);
             }
 
             handleAttack(damage) {
-                if (this.hp === 0) {
+                if (this.hp === 0 && !this.hasRevive) {
                     this.addToLog("💀 Cannot take damage when already defeated!");
                     return;
                 }
                 
+                // Apply critical hit
+                if (this.criticalNext) {
+                    damage *= 2;
+                    this.addToLog(`⚡ CRITICAL HIT! Damage doubled to ${damage}!`);
+                    this.criticalNext = false;
+                    this.updateCriticalStatus();
+                }
+                
+                // Apply boost
+                if (this.boostNext > 0) {
+                    damage += this.boostNext;
+                    this.addToLog(`💪 BOOST applied! +${this.boostNext} damage (total: ${damage})`);
+                    this.boostNext = 0;
+                    this.updateSpecialStatus();
+                }
+                
+                // Apply weaken (enemy attacks are weakened)
+                if (this.weakenNext) {
+                    damage = Math.max(1, damage - 1);
+                    this.addToLog(`🛡️ WEAKEN effect! Damage reduced by 1 (total: ${damage})`);
+                    this.weakenNext = false;
+                    this.updateSpecialStatus();
+                }
+                
+                // Check for reflect
+                if (this.reflectActive) {
+                    this.addToLog(`🪞 REFLECT activated! Taking ${damage} damage but reflecting it back!`);
+                    // Self-reflect mechanism: you take damage but immediately heal for same amount
+                    this.reflectActive = false;
+                    this.updateSpecialStatus();
+                    
+                    const oldHp = this.hp;
+                    this.hp = Math.max(0, this.hp - damage);
+                    this.addToLog(`⚔️ Took ${damage} damage! HP: ${oldHp} → ${this.hp}/${this.maxHp}`);
+                    
+                    // Reflect healing
+                    const reflectHeal = Math.min(this.maxHp - this.hp, damage);
+                    if (reflectHeal > 0) {
+                        this.hp += reflectHeal;
+                        this.addToLog(`🪞 Reflected ${reflectHeal} damage back as healing!`);
+                    }
+                    
+                    this.updateDisplay();
+                    this.flashStatus('reflect');
+                    return;
+                }
+                
+                // Check for counter
+                if (this.counterActive && this.hp > 0) {
+                    this.addToLog(`⚔️ COUNTER activated! Taking damage but striking back!`);
+                    this.counterActive = false;
+                    this.updateSpecialStatus();
+                    
+                    // Take damage first
+                    const oldHp = this.hp;
+                    this.hp = Math.max(0, this.hp - damage);
+                    this.addToLog(`⚔️ Took ${damage} damage! HP: ${oldHp} → ${this.hp}/${this.maxHp}`);
+                    
+                    // Counter attack
+                    if (this.hp > 0) {
+                        this.addToLog(`💥 Counter attack deals 2 damage back!`);
+                        // In single player, this becomes self-healing
+                        const counterHeal = Math.min(2, this.maxHp - this.hp);
+                        if (counterHeal > 0) {
+                            this.hp += counterHeal;
+                            this.addToLog(`⚡ Counter energy heals you for ${counterHeal} HP!`);
+                        }
+                    }
+                    
+                    this.updateDisplay();
+                    this.flashStatus('counter');
+                    return;
+                }
+                
+                // Regular attack processing
                 if (this.isBlocked) {
                     this.addToLog(`🛡️ Attack blocked! ${damage} damage negated.`);
                     this.isBlocked = false;
                     this.updateShieldStatus();
-                    
-                    // Add visual feedback for successful block
                     this.flashStatus('block');
                 } else {
                     const oldHp = this.hp;
-                    const newHp = Math.max(0, this.hp - damage);
-                    this.hp = newHp;
+                    let newHp = Math.max(0, this.hp - damage);
                     
+                    // Check for lifesteal
+                    if (this.lifestealActive && newHp > 0) {
+                        const lifestealAmount = Math.min(1, this.maxHp - newHp);
+                        if (lifestealAmount > 0) {
+                            newHp += lifestealAmount;
+                            this.addToLog(`🧛 LIFESTEAL: Gained ${lifestealAmount} HP from damage taken!`);
+                        }
+                    }
+                    
+                    this.hp = newHp;
                     this.addToLog(`⚔️ Took ${damage} damage! HP: ${oldHp} → ${newHp}/${this.maxHp}`);
                     this.updateDisplay();
-                    
-                    // Add visual feedback for damage
                     this.flashStatus('damage');
                     
                     if (newHp === 0) {
-                        this.addToLog("💀 Game Over! You have been defeated.");
-                        this.addToLog("🔄 Use RESET command or click Reset button to play again.");
-                        this.flashStatus('death');
+                        if (this.hasRevive) {
+                            this.addToLog("💀 Defeated! But REVIVE is ready...");
+                            this.addToLog("🔄 Use REVIVE command to come back with 5 HP!");
+                        } else {
+                            this.addToLog("💀 Game Over! You have been defeated.");
+                            this.addToLog("🔄 Use RESET command or click Reset button to play again.");
+                            this.flashStatus('death');
+                        }
                     } else if (newHp <= 5) {
                         this.addToLog("⚠️ Critical health! Consider healing.");
                     }
@@ -508,6 +665,46 @@
                 }
             }
 
+            updateCriticalStatus() {
+                const criticalStatusSpan = this.criticalStatus.querySelector('span');
+                if (this.criticalNext) {
+                    this.criticalStatus.className = 'flex items-center gap-2 p-2 rounded bg-red-600';
+                    criticalStatusSpan.textContent = 'CRITICAL';
+                } else {
+                    this.criticalStatus.className = 'flex items-center gap-2 p-2 rounded bg-gray-700';
+                    criticalStatusSpan.textContent = 'NORMAL';
+                }
+            }
+
+            updateSpecialStatus() {
+                const specialStatusSpan = this.specialStatus.querySelector('span');
+                let statusText = 'NONE';
+                let statusClass = 'flex items-center gap-2 p-2 rounded bg-gray-700';
+                
+                if (this.boostNext > 0) {
+                    statusText = 'BOOST';
+                    statusClass = 'flex items-center gap-2 p-2 rounded bg-orange-600';
+                } else if (this.weakenNext) {
+                    statusText = 'WEAKEN';
+                    statusClass = 'flex items-center gap-2 p-2 rounded bg-purple-600';
+                } else if (this.reflectActive) {
+                    statusText = 'REFLECT';
+                    statusClass = 'flex items-center gap-2 p-2 rounded bg-cyan-600';
+                } else if (this.counterActive) {
+                    statusText = 'COUNTER';
+                    statusClass = 'flex items-center gap-2 p-2 rounded bg-red-600';
+                } else if (this.hasRevive) {
+                    statusText = 'REVIVE';
+                    statusClass = 'flex items-center gap-2 p-2 rounded bg-green-600';
+                } else if (this.lifestealActive) {
+                    statusText = 'LIFESTEAL';
+                    statusClass = 'flex items-center gap-2 p-2 rounded bg-pink-600';
+                }
+                
+                this.specialStatus.className = statusClass;
+                specialStatusSpan.textContent = statusText;
+            }
+
             addToLog(message) {
                 const timestamp = new Date().toLocaleTimeString();
                 const logEntry = `${timestamp}: ${message}`;
@@ -543,7 +740,195 @@
                 this.addToLog("📱 NFC scanning is still active - ready for commands!");
             }
 
-            // Add visual feedback system
+            // New spell handlers
+            handleCritical() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
+                    return;
+                }
+                
+                if (this.criticalNext) {
+                    this.addToLog("⚡ Critical hit already prepared!");
+                    return;
+                }
+                
+                this.criticalNext = true;
+                this.addToLog("⚡ CRITICAL prepared! Next attack will deal double damage!");
+                this.updateCriticalStatus();
+                this.flashStatus('critical');
+            }
+            
+            handleGamble() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot gamble when defeated!");
+                    return;
+                }
+                
+                const outcomes = [
+                    { type: 'heal', value: 5, text: '🎰 JACKPOT! Healed 5 HP!' },
+                    { type: 'damage', value: 3, text: '🎰 Bad luck! Took 3 damage!' },
+                    { type: 'heal', value: 2, text: '🎰 Lucky! Healed 2 HP!' },
+                    { type: 'damage', value: 1, text: '🎰 Unlucky! Took 1 damage!' },
+                    { type: 'critical', value: 0, text: '🎰 Amazing! Next attack is critical!' },
+                    { type: 'shield', value: 0, text: '🎰 Great! Shield activated!' }
+                ];
+                
+                const result = outcomes[Math.floor(Math.random() * outcomes.length)];
+                this.addToLog(result.text);
+                
+                if (result.type === 'heal') {
+                    const oldHp = this.hp;
+                    this.hp = Math.min(this.maxHp, this.hp + result.value);
+                    this.addToLog(`❤️ HP: ${oldHp} → ${this.hp}/${this.maxHp}`);
+                    this.updateDisplay();
+                } else if (result.type === 'damage') {
+                    const oldHp = this.hp;
+                    this.hp = Math.max(0, this.hp - result.value);
+                    this.addToLog(`💔 HP: ${oldHp} → ${this.hp}/${this.maxHp}`);
+                    this.updateDisplay();
+                } else if (result.type === 'critical') {
+                    this.criticalNext = true;
+                    this.updateCriticalStatus();
+                } else if (result.type === 'shield') {
+                    this.isBlocked = true;
+                    this.updateShieldStatus();
+                }
+                
+                this.flashStatus('gamble');
+            }
+            
+            handleBoost() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
+                    return;
+                }
+                
+                if (this.boostNext > 0) {
+                    this.addToLog("💪 Boost already active!");
+                    return;
+                }
+                
+                this.boostNext = 2;
+                this.addToLog("💪 BOOST activated! Next attack deals +2 extra damage!");
+                this.updateSpecialStatus();
+                this.flashStatus('boost');
+            }
+            
+            handleWeaken() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
+                    return;
+                }
+                
+                if (this.weakenNext) {
+                    this.addToLog("🛡️ Weaken already active!");
+                    return;
+                }
+                
+                this.weakenNext = true;
+                this.addToLog("🛡️ WEAKEN cast! Next incoming attack deals -1 damage!");
+                this.updateSpecialStatus();
+                this.flashStatus('weaken');
+            }
+            
+            handleCounter() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
+                    return;
+                }
+                
+                if (this.counterActive) {
+                    this.addToLog("⚔️ Counter stance already active!");
+                    return;
+                }
+                
+                this.counterActive = true;
+                this.addToLog("⚔️ COUNTER stance activated! Next attack will be countered!");
+                this.updateSpecialStatus();
+                this.flashStatus('counter');
+            }
+            
+            handleReflect() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
+                    return;
+                }
+                
+                if (this.reflectActive) {
+                    this.addToLog("🪞 Reflect already active!");
+                    return;
+                }
+                
+                this.reflectActive = true;
+                this.addToLog("🪞 REFLECT activated! Next attack will be reflected as healing!");
+                this.updateSpecialStatus();
+                this.flashStatus('reflect');
+            }
+            
+            handleSwap() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot swap when defeated!");
+                    return;
+                }
+                
+                // In single-player mode, swap with "ideal" HP (15)
+                const targetHp = 15;
+                const oldHp = this.hp;
+                
+                if (oldHp === targetHp) {
+                    this.addToLog("🔄 SWAP: No change - already at balanced HP!");
+                    return;
+                }
+                
+                this.hp = targetHp;
+                this.addToLog(`🔄 SWAP activated! HP: ${oldHp} → ${this.hp}/${this.maxHp}`);
+                this.addToLog("🔄 Swapped with the cosmic balance!");
+                this.updateDisplay();
+                this.flashStatus('swap');
+            }
+            
+            handleRevive() {
+                if (this.hp > 0) {
+                    if (!this.hasRevive) {
+                        this.hasRevive = true;
+                        this.addToLog("🔮 REVIVE prepared! Will activate automatically if you're defeated.");
+                        this.updateSpecialStatus();
+                    } else {
+                        this.addToLog("🔮 Revive already prepared!");
+                    }
+                    return;
+                }
+                
+                // Use revive when defeated
+                if (this.hasRevive) {
+                    this.hp = 5;
+                    this.hasRevive = false;
+                    this.addToLog("🔮 REVIVE activated! Back in the fight with 5 HP!");
+                    this.updateDisplay();
+                    this.updateSpecialStatus();
+                    this.flashStatus('revive');
+                } else {
+                    this.addToLog("💀 No revive prepared! Cast REVIVE while alive to prepare it.");
+                }
+            }
+            
+            handleLifesteal() {
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
+                    return;
+                }
+                
+                if (this.lifestealActive) {
+                    this.lifestealActive = false;
+                    this.addToLog("🧛 LIFESTEAL deactivated.");
+                } else {
+                    this.lifestealActive = true;
+                    this.addToLog("🧛 LIFESTEAL activated! Gain 1 HP when taking damage (if you survive)!");
+                }
+                
+                this.updateSpecialStatus();
+                this.flashStatus('lifesteal');
+            }
             flashStatus(type) {
                 const colors = {
                     damage: 'bg-red-500',
