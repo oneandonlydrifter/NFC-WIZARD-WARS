@@ -112,6 +112,11 @@
                         Game works best on Android phones with Chrome browser and NFC enabled.
                     </p>
                 </div>
+                <div class="mt-3 p-2 bg-blue-900/30 rounded border border-blue-500/50">
+                    <p class="text-blue-300 text-xs">
+                        <strong>📁 Repository:</strong> <a href="https://github.com/oneandonlydrifter/NFC-WIZARD-WARS" target="_blank" class="underline hover:text-blue-200">NFC-WIZARD-WARS on GitHub</a> - Get setup instructions, NFC files, and more info
+                    </p>
+                </div>
             </div>
         </div>
     </div>
@@ -581,8 +586,13 @@
                     
                     if (newHp === 0) {
                         if (this.hasRevive) {
-                            this.addToLog("💀 Defeated! But REVIVE is ready...");
-                            this.addToLog("🔄 Use REVIVE command to come back with 5 HP!");
+                            // Auto-revive immediately
+                            this.hp = 5;
+                            this.hasRevive = false;
+                            this.addToLog("🔮 REVIVE triggered automatically! Back in the fight with 5 HP!");
+                            this.updateDisplay();
+                            this.updateSpecialStatus();
+                            this.flashStatus('revive');
                         } else {
                             this.addToLog("💀 Game Over! You have been defeated.");
                             this.addToLog("🔄 Use RESET command or click Reset button to play again.");
@@ -732,14 +742,33 @@
             resetGame() {
                 this.hp = 20;
                 this.isBlocked = false;
+                this.criticalNext = false;
+                this.boostNext = 0;
+                this.weakenNext = false;
+                this.reflectActive = false;
+                this.counterActive = false;
+                this.hasRevive = false;
+                this.lifestealActive = false;
                 this.gameLog = [];
                 this.updateDisplay();
                 this.updateShieldStatus();
+                this.updateCriticalStatus();
+                this.updateSpecialStatus();
                 this.updateGameLog();
                 this.addToLog("🎮 Game reset! Ready for battle.");
                 this.addToLog("📱 NFC scanning is still active - ready for commands!");
             }
 
+            // Clear all special effects (except revive which is more permanent)
+            clearSpecialEffects() {
+                this.boostNext = 0;
+                this.weakenNext = false;
+                this.reflectActive = false;
+                this.counterActive = false;
+                this.lifestealActive = false;
+                // Note: hasRevive is intentionally NOT cleared as it's more permanent
+            }
+            
             // New spell handlers
             handleCritical() {
                 if (this.hp === 0) {
@@ -808,6 +837,7 @@
                     return;
                 }
                 
+                this.clearSpecialEffects();
                 this.boostNext = 2;
                 this.addToLog("💪 BOOST activated! Next attack deals +2 extra damage!");
                 this.updateSpecialStatus();
@@ -825,6 +855,7 @@
                     return;
                 }
                 
+                this.clearSpecialEffects();
                 this.weakenNext = true;
                 this.addToLog("🛡️ WEAKEN cast! Next incoming attack deals -1 damage!");
                 this.updateSpecialStatus();
@@ -842,6 +873,7 @@
                     return;
                 }
                 
+                this.clearSpecialEffects();
                 this.counterActive = true;
                 this.addToLog("⚔️ COUNTER stance activated! Next attack will be countered!");
                 this.updateSpecialStatus();
@@ -859,6 +891,7 @@
                     return;
                 }
                 
+                this.clearSpecialEffects();
                 this.reflectActive = true;
                 this.addToLog("🪞 REFLECT activated! Next attack will be reflected as healing!");
                 this.updateSpecialStatus();
@@ -888,27 +921,17 @@
             }
             
             handleRevive() {
-                if (this.hp > 0) {
-                    if (!this.hasRevive) {
-                        this.hasRevive = true;
-                        this.addToLog("🔮 REVIVE prepared! Will activate automatically if you're defeated.");
-                        this.updateSpecialStatus();
-                    } else {
-                        this.addToLog("🔮 Revive already prepared!");
-                    }
+                if (this.hp === 0) {
+                    this.addToLog("💀 Cannot cast spells when defeated!");
                     return;
                 }
                 
-                // Use revive when defeated
-                if (this.hasRevive) {
-                    this.hp = 5;
-                    this.hasRevive = false;
-                    this.addToLog("🔮 REVIVE activated! Back in the fight with 5 HP!");
-                    this.updateDisplay();
+                if (!this.hasRevive) {
+                    this.hasRevive = true;
+                    this.addToLog("🔮 REVIVE prepared! Will automatically prevent death and restore 5 HP.");
                     this.updateSpecialStatus();
-                    this.flashStatus('revive');
                 } else {
-                    this.addToLog("💀 No revive prepared! Cast REVIVE while alive to prepare it.");
+                    this.addToLog("🔮 Revive already prepared!");
                 }
             }
             
@@ -922,6 +945,7 @@
                     this.lifestealActive = false;
                     this.addToLog("🧛 LIFESTEAL deactivated.");
                 } else {
+                    this.clearSpecialEffects();
                     this.lifestealActive = true;
                     this.addToLog("🧛 LIFESTEAL activated! Gain 1 HP when taking damage (if you survive)!");
                 }
@@ -929,6 +953,7 @@
                 this.updateSpecialStatus();
                 this.flashStatus('lifesteal');
             }
+
             flashStatus(type) {
                 const colors = {
                     damage: 'bg-red-500',
