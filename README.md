@@ -23,3 +23,5 @@ SHIELD (or BLOCK) - Blocks the next incoming attack completely. Does not replace
 WEAKEN - Next incoming attack deals -1 damage (minimum 1). Replaces any other active special effect.
 
 PUNCTUATION DOES NOT MATTER AND YOU CAN PLAY HOW YOU WANT THE NOT NEEDED BUT OG RULES ARE THAT ONCE A CARD IS PLAYED IT CANNOT BE PLAYED AGAIN NEXT TURN DO WHAT YOU WANT WITH THIS (also id enjoy it if you had fun) 
+
+link to get the premade nfc files: https://github.com/oneandonlydrifter/FLIPPER-ZERO-NFC-CARDS
